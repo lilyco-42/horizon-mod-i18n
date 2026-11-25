@@ -4,7 +4,7 @@ use mod_api::{
 };
 use std::fs;
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 
 const ID: &str = "lilyco_i18n";
 const KEY_CYCLE_LOCALE: &str = "cycle_locale";
@@ -15,6 +15,8 @@ static LOCALE_IDX: AtomicU32 = AtomicU32::new(0);
 fn data_dir() -> PathBuf {
     PathBuf::from("horizon-mods/.horizon-mod-data/lilyco_i18n")
 }
+
+static HUD_SHOWN: AtomicBool = AtomicBool::new(false);
 
 fn read_locale_idx() -> usize {
     let raw = fs::read_to_string(data_dir().join("active_locale")).unwrap_or_default();
@@ -49,7 +51,7 @@ impl Hooks for LilycoI18nMod {
         ));
 
         r.register_key_mapping(
-            KeyRegistration::new(KEY_CYCLE_LOCALE, "key.keyboard.l")
+            KeyRegistration::new(KEY_CYCLE_LOCALE, "key.keyboard.f8")
                 .label("key.lilyco_i18n.cycle_locale")
                 .context(KeyConflictContext::InGame),
         );
@@ -65,7 +67,12 @@ impl Hooks for LilycoI18nMod {
         if !host.on(ID) || event.action != KeyAction::Press || !host.playing() {
             return;
         }
-        if event.key == "key.keyboard.l" && !host.is_down(ID, KEY_CYCLE_LOCALE) {
+        if event.key == "key.keyboard.f9" {
+            let prev = HUD_SHOWN.load(Ordering::Relaxed);
+            HUD_SHOWN.store(!prev, Ordering::Relaxed);
+            return;
+        }
+        if event.key == "key.keyboard.f8" && !host.is_down(ID, KEY_CYCLE_LOCALE) {
             let next = (LOCALE_IDX.load(Ordering::Relaxed) as usize + 1) % LOCALES.len();
             LOCALE_IDX.store(next as u32, Ordering::Relaxed);
             host.set_setting(ID, "locale", &next.to_string());
@@ -80,14 +87,14 @@ impl Hooks for LilycoI18nMod {
     }
 
     fn render_gui_post(&self, host: &dyn ClientHost, event: &mut RenderGuiPostEvent<'_>) {
-        if !host.on(ID) {
+        if !host.on(ID) || !HUD_SHOWN.load(Ordering::Relaxed) {
             return;
         }
         let idx = read_locale_idx();
         let label = if idx == 0 {
-            "Lilyco i18n: 简体中文 [L切换]"
+            "Lilyco i18n: 简体中文 [F8切换 / F9隐藏]"
         } else {
-            "Lilyco i18n: EN-US [L]"
+            "Lilyco i18n: EN-US [F8 / F9]"
         };
         let draw = &mut *event.draw;
         let w = draw.text_width(label) + 8.0;
